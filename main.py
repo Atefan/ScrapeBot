@@ -2,6 +2,13 @@
 # main.py — orchestrates the full pipeline
 # ─────────────────────────────────────────────
 
+import os
+import traceback
+from datetime import datetime
+
+# ── Fix working directory for cron ──
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 from scrapers.nvda_scraper import NvidiaScraper
 from scrapers.meta_scraper import MetaScraper
 from scrapers.amd_scraper import AMDScraper
@@ -9,13 +16,25 @@ from scrapers.msft_scraper import MicrosoftScraper
 from scrapers.google_scraper import GoogleScraper
 from scrapers.aapl_scraper import AppleScraper
 from scrapers.avgo_scraper import BroadcomScraper
+from scrapers.globenewswire_scraper import GlobeNewswireScraper
 
 from storage.seen_urls import load_seen_urls, mark_as_seen
 from storage.log import append_release, append_notification
 from ai.analyzer import analyze
 from notifications.telegram import send_notification
-from datetime import datetime
-import traceback
+
+# ── Circular log — trim if over 1MB ──
+LOG_FILE      = "cron.log"
+LOG_MAX_BYTES = 1 * 1024 * 1024
+
+def trim_log():
+    if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > LOG_MAX_BYTES:
+        with open(LOG_FILE, "r") as f:
+            lines = f.readlines()
+        keep = lines[len(lines) // 2:]
+        with open(LOG_FILE, "w") as f:
+            f.writelines(keep)
+        print("  [log trimmed]")
 
 # ── Register all scrapers here ──
 SCRAPERS = [
@@ -26,6 +45,7 @@ SCRAPERS = [
     GoogleScraper(),
     AppleScraper(),
     BroadcomScraper(),
+    GlobeNewswireScraper(),
 ]
 
 
@@ -47,9 +67,8 @@ def build_telegram_message(release: dict, ai: dict) -> str:
 
 
 def notify_error(step: str, release: dict | None, error: Exception):
-    """Send a Telegram alert when something in the pipeline fails."""
     title = release.get("title", "Unknown")[:60] if release else "N/A"
-    tb    = traceback.format_exc()[-800:]   # last 800 chars of traceback
+    tb    = traceback.format_exc()[-800:]
 
     message = (
         f"🔴 <b>Bot Error — {step}</b>\n\n"
@@ -58,17 +77,18 @@ def notify_error(step: str, release: dict | None, error: Exception):
         f"<b>Traceback:</b>\n<code>{tb}</code>"
     )
     try:
-        send_notification(message, silent=True)   # silent=True — no sound for error alerts
+        send_notification(message, silent=True)
     except Exception as e:
         print(f"  WARNING: Could not send error notification: {e}")
 
 
 def run():
+    trim_log()
+
     print(f"\n{'='*55}")
     print(f"  Bot run started: {datetime.utcnow().isoformat()}")
     print(f"{'='*55}")
 
-    # ── Load seen URLs ──
     try:
         seen_urls = load_seen_urls()
     except Exception as e:
@@ -80,7 +100,6 @@ def run():
 
     for scraper in SCRAPERS:
 
-        # ── Step 1: scrape ──
         try:
             new_releases = scraper.get_new_releases(seen_urls)
         except Exception as e:
@@ -118,22 +137,26 @@ def run():
                 print(f"  ERROR marking URL as seen: {e}")
 
             # ── Step 5: notify if actionable ──
-            ai = release.get("ai", {})
-            try:
-                message = build_telegram_message(release, ai)
-                result  = send_notification(message)
-                append_notification({
-                    "url":             release["url"],
-                    "title":           release["title"],
-                    "recommendation":  ai["recommendation"],
-                    "partner_ticker":  ai.get("partner_ticker"),
-                    "telegram_result": result,
-                })
-                print(f"  Telegram sent → {ai['recommendation']} "
-                        f"{ai.get('partner_ticker') or ''}")
-            except Exception as e:
-                notify_error("Telegram notification", release, e)
-                print(f"  ERROR sending Telegram: {e}")
+            ai  = release.get("ai", {})
+            rec = ai.get("recommendation", "IGNORE")
+
+            if rec == "IGNORE":
+                print(f"  Skipping notification — IGNORE")
+            else:
+                try:
+                    message = build_telegram_message(release, ai)
+                    result  = send_notification(message)
+                    append_notification({
+                        "url":             release["url"],
+                        "title":           release["title"],
+                        "recommendation":  rec,
+                        "partner_ticker":  ai.get("partner_ticker"),
+                        "telegram_result": result,
+                    })
+                    print(f"  Telegram sent → {rec} {ai.get('partner_ticker') or ''}")
+                except Exception as e:
+                    notify_error("Telegram notification", release, e)
+                    print(f"  ERROR sending Telegram: {e}")
 
             total_new += 1
 
