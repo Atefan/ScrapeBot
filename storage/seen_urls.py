@@ -12,14 +12,14 @@ def load_seen_urls():
     """Load the set of already-processed URLs from disk."""
     if not os.path.exists(SEEN_URLS_FILE):
         return set()
-    with open(SEEN_URLS_FILE, "r") as f:
+    with open(SEEN_URLS_FILE, "r", encoding="utf-8") as f:
         return set(json.load(f))
 
 
 def save_seen_urls(seen_urls):
     """Persist the full set of seen URLs to disk."""
     os.makedirs(os.path.dirname(SEEN_URLS_FILE), exist_ok=True)
-    with open(SEEN_URLS_FILE, "w") as f:
+    with open(SEEN_URLS_FILE, "w", encoding="utf-8") as f:
         json.dump(list(seen_urls), f, indent=2)
 
 

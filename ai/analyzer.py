@@ -96,7 +96,7 @@ def analyze(release: dict) -> dict:
             raw    = _call_haiku(title, body)
             result = _parse_response(raw)
 
-            result["analyzed_at"] = datetime.utcnow().isoformat()
+            result["analyzed_at"] = datetime.now(datetime.UTC).isoformat()
 
             print(f"  → [{result.get('classification')}] "
                   f"Partner: {result.get('partner_ticker') or 'N/A'} | "
@@ -125,5 +125,5 @@ def analyze(release: dict) -> dict:
         "confidence":     None,
         "reasoning":      None,
         "error":          "Analysis failed after retries",
-        "analyzed_at":    datetime.utcnow().isoformat()
+        "analyzed_at":    datetime.now(datetime.UTC).isoformat()
     }

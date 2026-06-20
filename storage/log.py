@@ -15,7 +15,7 @@ def load_releases_log():
     """Load all saved releases. Returns a list."""
     if not os.path.exists(RELEASES_LOG_FILE):
         return []
-    with open(RELEASES_LOG_FILE, "r") as f:
+    with open(RELEASES_LOG_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -26,9 +26,9 @@ def append_release(entry):
     """
     os.makedirs(os.path.dirname(RELEASES_LOG_FILE), exist_ok=True)
     log = load_releases_log()
-    entry["logged_at"] = datetime.utcnow().isoformat()
+    entry["logged_at"] = datetime.now(datetime.UTC).isoformat()
     log.append(entry)
-    with open(RELEASES_LOG_FILE, "w") as f:
+    with open(RELEASES_LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(log, f, indent=2)
     print(f"  Logged: {entry.get('title', '')[:65]}")
 
@@ -38,7 +38,7 @@ def append_release(entry):
 def load_notifications_log():
     if not os.path.exists(NOTIF_LOG_FILE):
         return []
-    with open(NOTIF_LOG_FILE, "r") as f:
+    with open(NOTIF_LOG_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -46,7 +46,7 @@ def append_notification(entry):
     """Log every notification that was sent."""
     os.makedirs(os.path.dirname(NOTIF_LOG_FILE), exist_ok=True)
     log = load_notifications_log()
-    entry["sent_at"] = datetime.utcnow().isoformat()
+    entry["sent_at"] = datetime.now(datetime.UTC).isoformat()
     log.append(entry)
-    with open(NOTIF_LOG_FILE, "w") as f:
+    with open(NOTIF_LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(log, f, indent=2)

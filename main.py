@@ -29,10 +29,10 @@ LOG_MAX_BYTES = 1 * 1024 * 1024
 
 def trim_log():
     if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > LOG_MAX_BYTES:
-        with open(LOG_FILE, "r") as f:
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
             lines = f.readlines()
         keep = lines[len(lines) // 2:]
-        with open(LOG_FILE, "w") as f:
+        with open(LOG_FILE, "w", encoding="utf-8") as f:
             f.writelines(keep)
         print("  [log trimmed]")
 
@@ -86,7 +86,7 @@ def run():
     trim_log()
 
     print(f"\n{'='*55}")
-    print(f"  Bot run started: {datetime.utcnow().isoformat()}")
+    print(f"  Bot run started: {datetime.now(datetime.UTC).isoformat()}")
     print(f"{'='*55}")
 
     try:
