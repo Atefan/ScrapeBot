@@ -5,11 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Running the bot
 
 ```bash
-python main.py          # full pipeline run (scrape → AI → log → Telegram)
-python Tester.py        # manual scraper test (GlobeNewswire only, empty seen_urls)
+python -X utf8 main.py          # full pipeline run (scrape → AI → log → Telegram)
+python -X utf8 Tester.py        # manual scraper test (GlobeNewswire only, empty seen_urls)
 ```
 
-The bot is designed to be invoked on a cron schedule every ~5 minutes. `main.py` sets `os.chdir` to its own directory so cron invocations work correctly regardless of working directory.
+The `-X utf8` flag is required on Windows to prevent UnicodeEncodeError when emoji characters are printed and stdout is redirected to `cron.log`.
+
+The bot runs via a Windows Scheduled Task (every 30 min, Mon–Fri, 14:00–22:00). `main.py` sets `os.chdir` to its own directory so the task invocation works correctly regardless of working directory.
 
 ## Required environment variables
 
@@ -21,7 +23,11 @@ TELEGRAM_CHAT_ID
 
 ## Dependencies
 
-No `requirements.txt` exists yet. Packages in use: `requests`, `beautifulsoup4`, `feedparser`, `anthropic` (raw HTTP — the SDK is not used).
+```bash
+pip install -r requirements.txt
+```
+
+Packages: `requests`, `beautifulsoup4`, `feedparser`. The `anthropic` SDK is not used — the AI call goes via raw HTTP in `ai/analyzer.py`.
 
 ## Architecture
 
