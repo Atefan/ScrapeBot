@@ -129,7 +129,6 @@ class GlobeNewswireScraper(BaseScraper):
                 if not matched:
                     continue
 
-                breakpoint()
                 print(f"  HIT [{', '.join(matched)}]: {title[:65]}")
                 candidates.append({
                     "url":     url,
