@@ -4,7 +4,7 @@
 
 import os
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 
 # ── Fix working directory for cron ──
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -86,7 +86,7 @@ def run():
     trim_log()
 
     print(f"\n{'='*55}")
-    print(f"  Bot run started: {datetime.now(datetime.UTC).isoformat()}")
+    print(f"  Bot run started: {datetime.now(timezone.utc).isoformat()}")
     print(f"{'='*55}")
 
     try:

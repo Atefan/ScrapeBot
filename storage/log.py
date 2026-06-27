@@ -5,7 +5,7 @@
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from config import RELEASES_LOG_FILE, NOTIF_LOG_FILE
 
 
@@ -26,7 +26,7 @@ def append_release(entry):
     """
     os.makedirs(os.path.dirname(RELEASES_LOG_FILE), exist_ok=True)
     log = load_releases_log()
-    entry["logged_at"] = datetime.now(datetime.UTC).isoformat()
+    entry["logged_at"] = datetime.now(timezone.utc).isoformat()
     log.append(entry)
     with open(RELEASES_LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(log, f, indent=2)
@@ -46,7 +46,7 @@ def append_notification(entry):
     """Log every notification that was sent."""
     os.makedirs(os.path.dirname(NOTIF_LOG_FILE), exist_ok=True)
     log = load_notifications_log()
-    entry["sent_at"] = datetime.now(datetime.UTC).isoformat()
+    entry["sent_at"] = datetime.now(timezone.utc).isoformat()
     log.append(entry)
     with open(NOTIF_LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(log, f, indent=2)
