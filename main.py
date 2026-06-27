@@ -3,6 +3,7 @@
 # ─────────────────────────────────────────────
 
 import os
+import sys
 import traceback
 from datetime import datetime, timezone
 
@@ -22,6 +23,28 @@ from storage.seen_urls import load_seen_urls, mark_as_seen
 from storage.log import append_release, append_notification
 from ai.analyzer import analyze
 from notifications.telegram import send_notification
+
+class _Tee:
+    """Mirrors writes to both a stream and an open file handle."""
+    def __init__(self, stream, fh):
+        self._stream = stream
+        self._fh     = fh
+    def write(self, data):
+        if self._stream is not None:
+            try:
+                self._stream.write(data)
+            except Exception:
+                pass
+        self._fh.write(data)
+        self._fh.flush()
+    def flush(self):
+        if self._stream is not None:
+            try:
+                self._stream.flush()
+            except Exception:
+                pass
+        self._fh.flush()
+
 
 # ── Circular log — trim if over 1MB ──
 LOG_FILE      = "cron.log"
@@ -85,85 +108,96 @@ def notify_error(step: str, release: dict | None, error: Exception):
 def run():
     trim_log()
 
-    print(f"\n{'='*55}")
-    print(f"  Bot run started: {datetime.now(timezone.utc).isoformat()}")
-    print(f"{'='*55}")
+    _log_fh    = open(LOG_FILE, "a", encoding="utf-8")
+    sys.stdout = _Tee(sys.__stdout__, _log_fh)
+    sys.stderr = _Tee(sys.__stderr__, _log_fh)
 
     try:
-        seen_urls = load_seen_urls()
-    except Exception as e:
-        notify_error("load_seen_urls", None, e)
-        print(f"CRITICAL: Could not load seen_urls — aborting. {e}")
-        return
-
-    total_new = 0
-
-    for scraper in SCRAPERS:
+        print(f"\n{'='*55}")
+        print(f"  Bot run started: {datetime.now(timezone.utc).isoformat()}")
+        print(f"{'='*55}")
 
         try:
-            new_releases = scraper.get_new_releases(seen_urls)
+            seen_urls = load_seen_urls()
         except Exception as e:
-            notify_error(f"Scraper [{scraper.SOURCE_NAME}]", None, e)
-            print(f"  ERROR in scraper {scraper.SOURCE_NAME}: {e} — skipping")
-            continue
+            notify_error("load_seen_urls", None, e)
+            print(f"CRITICAL: Could not load seen_urls — aborting. {e}")
+            return
 
-        for release in new_releases:
+        total_new = 0
 
-            # ── Step 2: AI analysis ──
+        for scraper in SCRAPERS:
+
             try:
-                ai_result = analyze(release)
-                release["ai"] = ai_result
+                new_releases = scraper.get_new_releases(seen_urls)
             except Exception as e:
-                notify_error("AI Analyzer", release, e)
-                print(f"  ERROR in analyzer for '{release['title'][:50]}': {e}")
-                release["ai"] = {
-                    "classification": "ERROR",
-                    "recommendation": "IGNORE",
-                    "error":          str(e)
-                }
+                notify_error(f"Scraper [{scraper.SOURCE_NAME}]", None, e)
+                print(f"  ERROR in scraper {scraper.SOURCE_NAME}: {e} — skipping")
+                continue
 
-            # ── Step 3: log ──
-            try:
-                append_release(release)
-            except Exception as e:
-                notify_error("append_release", release, e)
-                print(f"  ERROR writing to log: {e}")
+            for release in new_releases:
 
-            # ── Step 4: mark as seen ──
-            try:
-                mark_as_seen(release["url"], seen_urls)
-            except Exception as e:
-                notify_error("mark_as_seen", release, e)
-                print(f"  ERROR marking URL as seen: {e}")
-
-            # ── Step 5: notify if actionable ──
-            ai  = release.get("ai", {})
-            rec = ai.get("recommendation", "IGNORE")
-
-            if rec == "IGNORE":
-                print(f"  Skipping notification — IGNORE")
-            else:
+                # ── Step 2: AI analysis ──
                 try:
-                    message = build_telegram_message(release, ai)
-                    result  = send_notification(message)
-                    append_notification({
-                        "url":             release["url"],
-                        "title":           release["title"],
-                        "recommendation":  rec,
-                        "partner_ticker":  ai.get("partner_ticker"),
-                        "telegram_result": result,
-                    })
-                    print(f"  Telegram sent → {rec} {ai.get('partner_ticker') or ''}")
+                    ai_result = analyze(release)
+                    release["ai"] = ai_result
                 except Exception as e:
-                    notify_error("Telegram notification", release, e)
-                    print(f"  ERROR sending Telegram: {e}")
+                    notify_error("AI Analyzer", release, e)
+                    print(f"  ERROR in analyzer for '{release['title'][:50]}': {e}")
+                    release["ai"] = {
+                        "classification": "ERROR",
+                        "recommendation": "IGNORE",
+                        "error":          str(e)
+                    }
 
-            total_new += 1
+                # ── Step 3: log ──
+                try:
+                    append_release(release)
+                except Exception as e:
+                    notify_error("append_release", release, e)
+                    print(f"  ERROR writing to log: {e}")
 
-    print(f"\n{'='*55}")
-    print(f"  Done. {total_new} new release(s) processed.")
-    print(f"{'='*55}\n")
+                # ── Step 4: mark as seen ──
+                try:
+                    mark_as_seen(release["url"], seen_urls)
+                except Exception as e:
+                    notify_error("mark_as_seen", release, e)
+                    print(f"  ERROR marking URL as seen: {e}")
+
+                # ── Step 5: notify if actionable ──
+                ai  = release.get("ai", {})
+                rec = ai.get("recommendation", "IGNORE")
+
+                if rec == "IGNORE":
+                    print(f"  Skipping notification — IGNORE")
+                else:
+                    try:
+                        message = build_telegram_message(release, ai)
+                        result  = send_notification(message)
+                        append_notification({
+                            "url":             release["url"],
+                            "title":           release["title"],
+                            "recommendation":  rec,
+                            "partner_ticker":  ai.get("partner_ticker"),
+                            "telegram_result": result,
+                        })
+                        print(f"  Telegram sent → {rec} {ai.get('partner_ticker') or ''}")
+                    except Exception as e:
+                        notify_error("Telegram notification", release, e)
+                        print(f"  ERROR sending Telegram: {e}")
+
+                total_new += 1
+
+        print(f"\n{'='*55}")
+        print(f"  Done. {total_new} new release(s) processed.")
+        print(f"{'='*55}\n")
+
+    finally:
+        sys.stdout = sys.__stdout__
+        sys.stderr = sys.__stderr__
+        _log_fh.close()
 
 
 if __name__ == "__main__":
     run()
+    os._exit(0)
